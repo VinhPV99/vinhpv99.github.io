@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intercept API Android — HTTP Toolkit + rootAVD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2330;
+    --border: #30363d;
+    --border-soft: #21262d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #6e7681;
+    --accent: #58a6ff;
+    --accent-dim: rgba(88,166,255,0.1);
+    --green: #3fb950;
+    --green-dim: rgba(63,185,80,0.1);
+    --yellow: #d29922;
+    --yellow-dim: rgba(210,153,34,0.1);
+    --orange: #f0883e;
+    --orange-dim: rgba(240,136,62,0.08);
+    --red: #f85149;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+
+  /* Layout */
+  .layout { display: flex; max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 2rem 1.5rem 2rem 0;
+    border-right: 1px solid var(--border-soft);
+  }
+
+  .sidebar-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 1rem;
+  }
+
+  .sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+
+  .sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+  }
+
+  .sidebar a:hover { background: var(--surface); color: var(--text); }
+  .sidebar a.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(88,166,255,0.2); }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--surface2);
+    color: var(--text-dim);
+    flex-shrink: 0;
+    font-family: var(--mono);
+  }
+
+  /* Main content */
+  .main { flex: 1; padding: 3rem 0 4rem 3rem; min-width: 0; }
+
+  /* Hero */
+  .hero {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2.5rem;
+    margin-bottom: 3rem;
+    background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(88,166,255,0.06) 0%, transparent 70%);
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(88,166,255,0.2);
+    border-radius: 20px;
+    padding: 4px 12px;
+    margin-bottom: 1.25rem;
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+  }
+
+  .hero h1 {
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    margin-bottom: 0.75rem;
+  }
+
+  .hero p {
+    color: var(--text-muted);
+    font-size: 14px;
+    max-width: 540px;
+    line-height: 1.7;
+  }
+
+  /* Stack table */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 1.75rem;
+  }
+
+  .stack-card {
+    background: var(--bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .stack-card .tool {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+    font-family: var(--mono);
+  }
+
+  .stack-card .role {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Sections */
+  .section { margin-bottom: 3rem; scroll-margin-top: 2rem; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .section-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--mono);
+    background: var(--surface2);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Subsection */
+  .sub { margin-bottom: 1.5rem; }
+  .sub-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.75rem;
+  }
+
+  /* Lists */
+  .list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+  .list li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-muted);
+    padding: 8px 12px;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+  }
+
+  .list li::before {
+    content: '→';
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 12px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .list li strong { color: var(--text); font-weight: 500; }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+
+  .code-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+    background: var(--surface2);
+  }
+
+  .code-dots { display: flex; gap: 5px; }
+  .code-dots span {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--border);
+  }
+
+  .code-body {
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: #79c0ff;
+    line-height: 1.8;
+    overflow-x: auto;
+  }
+
+  .code-body .cmd { color: #d2a8ff; }
+  .code-body .comment { color: var(--text-dim); }
+  .code-body .path { color: #a5d6ff; }
+  .code-body .flag { color: var(--green); }
+  .code-body .out { color: var(--text-muted); }
+
+  /* Callout */
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 1rem 0;
+    border: 1px solid;
+  }
+
+  .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .callout-text { color: inherit; }
+  .callout-text strong { font-weight: 500; }
+
+  .callout.tip { background: var(--green-dim); border-color: rgba(63,185,80,0.2); color: #7ee787; }
+  .callout.warn { background: var(--yellow-dim); border-color: rgba(210,153,34,0.2); color: #e3b341; }
+  .callout.info { background: var(--accent-dim); border-color: rgba(88,166,255,0.2); color: #79c0ff; }
+
+  /* Steps (numbered flow) */
+  .steps { display: flex; flex-direction: column; gap: 0; }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    padding-bottom: 1.25rem;
+    position: relative;
+  }
+
+  .step::after {
+    content: '';
+    position: absolute;
+    left: 15px; top: 32px; bottom: 0;
+    width: 1px;
+    background: var(--border-soft);
+  }
+
+  .step:last-child::after { display: none; }
+
+  .step-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    color: var(--accent);
+    font-family: var(--mono);
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .step-body { flex: 1; padding-top: 5px; }
+  .step-head { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
+  .step-desc { font-size: 13px; color: var(--text-muted); line-height: 1.65; }
+
+  /* Info row */
+  .info-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 1rem 0;
+  }
+
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+
+  .info-card .label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .method-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin: 2px 3px 2px 0;
+  }
+
+  .m-get { background: rgba(63,185,80,0.12); color: var(--green); }
+  .m-post { background: rgba(88,166,255,0.12); color: var(--accent); }
+  .m-put { background: rgba(210,153,34,0.12); color: var(--yellow); }
+  .m-del { background: rgba(248,81,73,0.12); color: var(--red); }
+  .m-patch { background: rgba(240,136,62,0.12); color: var(--orange); }
+
+  /* Filter tip table */
+  .filter-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .filter-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--text-muted);
+  }
+  .filter-table tr:last-child td { border-bottom: none; }
+  .filter-table code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: #79c0ff;
+  }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+
+  /* Footer */
+  .footer {
+    border-top: 1px solid var(--border-soft);
+    padding: 2rem 0 1rem;
+    margin-top: 3rem;
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .footer code { font-family: var(--mono); color: var(--accent); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { padding: 2rem 0; }
+    .layout { padding: 0 1rem; }
+    .stack-grid { grid-template-columns: 1fr; }
+    .info-row { grid-template-columns: 1fr; }
+    .hero { padding: 1.75rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <p class="sidebar-title">Nội dung</p>
+    <nav>
+      <a href="#tong-quan" class="active">
+        <span class="step-num">★</span>Tổng quan
+      </a>
+      <a href="#buoc-1"><span class="step-num">1</span>Chuẩn bị</a>
+      <a href="#buoc-2"><span class="step-num">2</span>Clone rootAVD</a>
+      <a href="#buoc-3"><span class="step-num">3</span>Tạo máy ảo</a>
+      <a href="#buoc-4"><span class="step-num">4</span>Root máy ảo</a>
+      <a href="#buoc-5"><span class="step-num">5</span>Kiểm tra root</a>
+      <a href="#buoc-6"><span class="step-num">6</span>HTTP Toolkit</a>
+      <a href="#buoc-7"><span class="step-num">7</span>Xem traffic</a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Hero -->
+    <div class="hero" id="tong-quan">
+      <div class="hero-badge">&#9679; Android API Intercept</div>
+      <h1>Hướng dẫn Intercept API Android</h1>
+      <p>Intercept toàn bộ traffic HTTP/HTTPS từ bất kỳ app Android nào bằng máy ảo Google Play đã root — không cần patch APK.</p>
+
+      <div class="stack-grid">
+        <div class="stack-card">
+          <div class="tool">Android Studio</div>
+          <div class="role">Tạo và quản lý máy ảo (AVD)</div>
+        </div>
+        <div class="stack-card">
+          <div class="tool">rootAVD + Magisk</div>
+          <div class="role">Root máy ảo Google Play</div>
+        </div>
+        <div class="stack-card">
+          <div class="tool">HTTP Toolkit</div>
+          <div class="role">Intercept và xem traffic HTTPS</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bước 1 -->
+    <section class="section" id="buoc-1">
+      <div class="section-header">
+        <div class="section-badge">1</div>
+        <div>
+          <div class="section-title">Chuẩn bị</div>
+          <div class="section-subtitle">macOS — Phần mềm cần cài</div>
+        </div>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">Phần mềm cần cài trên Mac</div>
+        <ul class="list">
+          <li><strong>Android Studio</strong> — developer.android.com/studio</li>
+          <li><strong>HTTP Toolkit</strong> — httptoolkit.com</li>
+          <li><code style="font-family:monospace;background:var(--surface2);padding:2px 6px;border-radius:4px;color:#79c0ff;font-size:12px">brew install android-platform-tools</code> — ADB</li>
+          <li><code style="font-family:monospace;background:var(--surface2);padding:2px 6px;border-radius:4px;color:#79c0ff;font-size:12px">brew install git</code> — Git</li>
+        </ul>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">Kiểm tra ADB</div>
+        <div class="code-block">
+          <div class="code-label">
+            <span>TERMINAL</span>
+            <div class="code-dots"><span></span><span></span><span></span></div>
+          </div>
+          <div class="code-body">
+            <span class="cmd">adb</span> version<br>
+            <span class="comment"># Kết quả đúng:</span><br>
+            <span class="out">Android Debug Bridge version 1.0.41</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bước 2 -->
+    <section class="section" id="buoc-2">
+      <div class="section-header">
+        <div class="section-badge">2</div>
+        <div>
+          <div class="section-title">Clone rootAVD về Mac</div>
+          <div class="section-subtitle">Lấy đường dẫn ramdisk của máy ảo</div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-label">
+          <span>TERMINAL</span>
+          <div class="code-dots"><span></span><span></span><span></span></div>
+        </div>
+        <div class="code-body">
+          <span class="cmd">git</span> clone https://github.com/newbit1/rootAVD.git<br>
+          <span class="cmd">cd</span> rootAVD<br><br>
+          <span class="comment"># Liệt kê AVD để lấy đường dẫn ramdisk</span><br>
+          <span class="cmd">sh</span> rootAVD.sh ListAllAVDs<br><br>
+          <span class="comment"># Kết quả ví dụ:</span><br>
+          <span class="out">./rootAVD.sh system-images/android-33/</span><span class="path">google_apis_playstore</span><span class="out">/arm64-v8a/ramdisk.img</span>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-icon">⚠</span>
+        <span class="callout-text">Máy ảo Google Play dùng thư mục <strong>google_apis_playstore</strong> — khác với <strong>google_apis</strong>. Chú ý lấy đúng đường dẫn từ lệnh ListAllAVDs.</span>
+      </div>
+    </section>
+
+    <!-- Bước 3 -->
+    <section class="section" id="buoc-3">
+      <div class="section-header">
+        <div class="section-badge">3</div>
+        <div>
+          <div class="section-title">Tạo máy ảo Google Play</div>
+          <div class="section-subtitle">Android Studio → Virtual Device Manager</div>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-dot">1</div>
+          <div class="step-body">
+            <div class="step-head">Mở Virtual Device Manager</div>
+            <div class="step-desc">Android Studio → biểu tượng điện thoại trên toolbar → Create Device</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot">2</div>
+          <div class="step-body">
+            <div class="step-head">Chọn hardware: Pixel 6</div>
+            <div class="step-desc">Nhấn Next để tiếp tục</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot">3</div>
+          <div class="step-body">
+            <div class="step-head">Chọn System Image</div>
+            <div class="step-desc">Tab Recommended → API Level <strong style="color:var(--text)">Android API 33 </strong> → Target phải có icon <strong style="color:var(--green)">▶ Google Play</strong></div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-dot">4</div>
+          <div class="step-body">
+            <div class="step-head">Đặt tên và khởi động</div>
+            <div class="step-desc">Đặt tên AVD: <code style="font-family:monospace;background:var(--surface2);padding:1px 5px;border-radius:3px;color:#79c0ff;font-size:12px">Pixel6_API33_GooglePlay</code> → Finish → Start</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">✓</span>
+        <span class="callout-text">Máy ảo boot xong, vào CH Play đăng nhập tài khoản Google là thành công. Lúc này chưa root — sẽ thực hiện ở bước tiếp theo.</span>
+      </div>
+    </section>
+
+    <!-- Bước 4 -->
+    <section class="section" id="buoc-4">
+      <div class="section-header">
+        <div class="section-badge">4</div>
+        <div>
+          <div class="section-title">Root máy ảo bằng rootAVD</div>
+          <div class="section-subtitle">Magisk — máy ảo phải đang chạy trước</div>
+        </div>
+      </div>
+
+      <div class="callout warn">
+        <span class="callout-icon">⚠</span>
+        <span class="callout-text">Máy ảo phải đang chạy trước khi thực hiện. Kiểm tra: <strong>adb devices</strong> — phải thấy <code style="font-family:monospace;font-size:12px">emulator-xxxx device</code></span>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">4.1 — Chạy rootAVD để patch ramdisk</div>
+        <div class="code-block">
+          <div class="code-label">
+            <span>TERMINAL — thay đường dẫn bằng kết quả từ bước 2</span>
+            <div class="code-dots"><span></span><span></span><span></span></div>
+          </div>
+          <div class="code-body">
+            <span class="cmd">./rootAVD.sh</span> <span class="path">system-images/android-33/google_apis_playstore/arm64-v8a/ramdisk.img</span>
+          </div>
+        </div>
+        <ul class="list" style="margin-top:10px">
+          <li>Tải Magisk APK mới nhất tự động</li>
+          <li>Patch file <code style="font-family:monospace;font-size:12px">ramdisk.img</code> của máy ảo</li>
+          <li>Cài Magisk APK lên máy ảo</li>
+          <li>Khởi động lại máy ảo tự động</li>
+        </ul>
+      </div>
+
+      <div class="sub" style="margin-top:1.5rem">
+        <div class="sub-title">4.2 — Hoàn tất cài đặt Magisk</div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-dot">a</div>
+            <div class="step-body">
+              <div class="step-head">Mở app Magisk</div>
+              <div class="step-desc">Sau khi restart, mở Magisk (nếu không mở được → chọn Cold Boot)</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-dot">b</div>
+            <div class="step-body">
+              <div class="step-head">Additional Setup</div>
+              <div class="step-desc">Magisk hiện thông báo yêu cầu additional setup → nhấn OK → máy ảo tự reboot thêm 1 lần</div>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-dot">c</div>
+            <div class="step-body">
+              <div class="step-head">Xác nhận root</div>
+              <div class="step-desc">Mở lại Magisk → tab Home → Installed → Direct Install → Let's Go</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">✓</span>
+        <span class="callout-text">Magisk hiển thị version ở mục Installed là root thành công.</span>
+      </div>
+    </section>
+
+    <!-- Bước 5 — Kiểm tra root (chuyển lên trước HTTP Toolkit) -->
+    <section class="section" id="buoc-5">
+      <div class="section-header">
+        <div class="section-badge">5</div>
+        <div>
+          <div class="section-title">Kiểm tra root</div>
+          <div class="section-subtitle">Xác nhận trước khi kết nối HTTP Toolkit</div>
+        </div>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">5.1 — Kiểm tra qua ADB</div>
+        <div class="code-block">
+          <div class="code-label">
+            <span>TERMINAL</span>
+            <div class="code-dots"><span></span><span></span><span></span></div>
+          </div>
+          <div class="code-body">
+            <span class="cmd">adb</span> <span class="flag">-s</span> emulator-5554 shell<br>
+            <span class="cmd">su</span><br>
+            <span class="cmd">whoami</span><br><br>
+            <span class="comment"># Kết quả đúng:</span><br>
+            <span class="out">root</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-icon">ℹ</span>
+        <span class="callout-text">Nếu lệnh <code style="font-family:monospace;font-size:12px">su</code> không báo lỗi và <code style="font-family:monospace;font-size:12px">whoami</code> trả về <strong>root</strong>, máy ảo đã được root thành công. Chỉ tiếp tục bước 6 khi đã xác nhận root.</span>
+      </div>
+    </section>
+
+    <!-- Bước 6 — Kết nối HTTP Toolkit -->
+    <section class="section" id="buoc-6">
+      <div class="section-header">
+        <div class="section-badge">6</div>
+        <div>
+          <div class="section-title">Kết nối HTTP Toolkit</div>
+          <div class="section-subtitle">Inject system certificate qua Magisk</div>
+        </div>
+      </div>
+
+      <div class="sub">
+        <div class="sub-title">6.1 — Cài HTTP Toolkit trên Mac</div>
+        <ul class="list">
+          <li>Truy cập <strong>httptoolkit.com</strong> → tải bản macOS (.dmg)</li>
+          <li>Cài đặt và mở HTTP Toolkit</li>
+        </ul>
+      </div>
+
+      <div class="sub" style="margin-top:1.25rem">
+        <div class="sub-title">6.2 — Kết nối máy ảo qua ADB</div>
+        <div class="code-block">
+          <div class="code-label">
+            <span>TERMINAL</span>
+            <div class="code-dots"><span></span><span></span><span></span></div>
+          </div>
+          <div class="code-body">
+            <span class="comment"># Kiểm tra máy ảo đang chạy</span><br>
+            <span class="cmd">adb</span> devices<br>
+            <span class="out">emulator-5554    device</span>
+          </div>
+        </div>
+        <ul class="list" style="margin-top:10px">
+          <li>Trong HTTP Toolkit → Intercept → click <strong>Android device via ADB</strong></li>
+          <li>HTTP Toolkit tự cài app + inject CA certificate vào system level</li>
+          <li>Bật VPN để redirect toàn bộ traffic</li>
+        </ul>
+      </div>
+      <div class="callout tip">
+        <span class="callout-icon">✓</span>
+        <span class="callout-text">Vì máy ảo đã root, cả 2 dòng đều tick xanh: <strong>USER TRUST ENABLED</strong> và <strong>SYSTEM TRUST ENABLED</strong>. Toàn bộ HTTPS traffic của mọi app sẽ được decrypt.</span>
+      </div>
+    </section>
+
+    <!-- Bước 7 — Xem traffic -->
+    <section class="section" id="buoc-7">
+      <div class="section-header">
+        <div class="section-badge">7</div>
+        <div>
+          <div class="section-title">Xem traffic</div>
+          <div class="section-subtitle">HTTP Toolkit → tab View</div>
+        </div>
+      </div>
+
+      <ul class="list" style="margin-bottom:1.25rem">
+        <li>Mở app bất kỳ trên máy ảo và dùng bình thường</li>
+        <li>Trên Mac, chuyển sang tab <strong>View</strong> trong HTTP Toolkit</li>
+        <li>Các request hiện ra theo thời gian thực</li>
+      </ul>
+
+      <div class="info-row">
+        <div class="info-card">
+          <div class="label">HTTP Methods có thể thấy</div>
+          <div style="margin-top:4px">
+            <span class="method-badge m-get">GET</span>
+            <span class="method-badge m-post">POST</span>
+            <span class="method-badge m-put">PUT</span>
+            <span class="method-badge m-del">DELETE</span>
+            <span class="method-badge m-patch">PATCH</span>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="label">Thông tin có thể xem</div>
+          <div style="font-size:13px;color:var(--text-muted);line-height:1.7;margin-top:4px">
+            URL đầy đủ · Headers · Request body (JSON) · Response body · Status code · Thời gian phản hồi
+          </div>
+        </div>
+      </div>
+
+      <div class="sub" style="margin-top:1.25rem">
+        <div class="sub-title">Mẹo filter nhanh</div>
+        <div class="table-wrap">
+          <table class="filter-table">
+            <thead>
+              <tr>
+                <th>Hành động</th>
+                <th>Tác dụng</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Gõ vào ô <code>Search</code></td>
+                <td>Lọc theo domain hoặc path</td>
+              </tr>
+              <tr>
+                <td>Click cột <code>Status</code></td>
+                <td>Lọc request lỗi 4xx, 5xx</td>
+              </tr>
+              <tr>
+                <td>Click từng request</td>
+                <td>Xem đầy đủ header + body</td>
+              </tr>
+              <tr>
+                <td>Click <code>Pin source</code></td>
+                <td>Chỉ xem traffic từ 1 app cụ thể</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <div class="footer">
+      <span>HTTP Toolkit + ADB + rootAVD + Magisk · macOS · Google Play AVD</span>
+      <code>v4.1</code>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  const links = document.querySelectorAll('.sidebar a');
+  const sections = document.querySelectorAll('.section, .hero');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const id = entry.target.id;
+        const active = document.querySelector(`.sidebar a[href="#${id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+
+  links.forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(link.getAttribute('href'));
+      if (target) target.scrollIntoView({ behavior: 'smooth' });
+    });
+  });
+</script>
+</body>
+</html>

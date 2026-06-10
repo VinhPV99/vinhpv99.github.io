@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Frame Cutter — Video to Image</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111115;
+    --card: #18181f;
+    --border: #2a2a35;
+    --accent: #e8ff5a;
+    --accent2: #5affd6;
+    --text: #f0f0f5;
+    --muted: #6b6b80;
+    --danger: #ff5a5a;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  header {
+    margin-bottom: 48px;
+  }
+
+  .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 4px 10px;
+    border-radius: 2px;
+    margin-bottom: 16px;
+    opacity: .8;
+  }
+
+  h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 800;
+    line-height: .95;
+    letter-spacing: -.02em;
+  }
+
+  h1 span {
+    color: var(--accent);
+    display: inline-block;
+  }
+
+  .sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 14px;
+    letter-spacing: .02em;
+  }
+
+  /* drop zone */
+  .drop-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 12px;
+    padding: 64px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent);
+    background: #12121a;
+  }
+
+  .drop-zone::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(232,255,90,.04) 0%, transparent 70%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .drop-zone:hover::before { opacity: 1; }
+
+  .drop-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 20px;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    background: var(--card);
+  }
+
+  .drop-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .drop-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: .05em;
+  }
+
+  #file-input { display: none; }
+
+  /* main workspace */
+  .workspace { display: none; }
+  .workspace.visible { display: block; }
+
+  .video-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .video-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+  }
+
+  .video-name {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent2);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 300px;
+  }
+
+  .btn-reset {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    background: none;
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 4px;
+    transition: all .2s;
+    letter-spacing: .05em;
+  }
+  .btn-reset:hover { border-color: var(--danger); color: var(--danger); }
+
+  .video-wrap {
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    max-height: 500px;
+  }
+
+  #player {
+    max-width: 100%;
+    max-height: 500px;
+    display: block;
+  }
+
+  /* controls */
+  .controls {
+    padding: 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .time-display {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    color: var(--accent);
+    min-width: 120px;
+    letter-spacing: .05em;
+  }
+
+  .scrub-row {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform .15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover {
+    transform: scale(1.3);
+  }
+
+  .step-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  input[type=number] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    width: 70px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  input[type=number]:focus { border-color: var(--accent2); }
+
+  .btn-capture {
+    background: var(--accent);
+    color: #0a0a0c;
+    border: none;
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 10px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: .02em;
+    transition: all .15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+  .btn-capture:hover { background: #fff; transform: translateY(-1px); }
+  .btn-capture:active { transform: translateY(0); }
+
+  /* step options */
+  .options-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    padding: 0 20px 20px;
+  }
+
+  .opt-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+  }
+  select:focus { border-color: var(--accent2); }
+
+  /* frames gallery */
+  .gallery-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .gallery-title {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .count-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    background: var(--accent);
+    color: #0a0a0c;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: .05em;
+  }
+
+  .btn-dl-all {
+    background: none;
+    border: 1.5px solid var(--accent2);
+    color: var(--accent2);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 8px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-dl-all:hover { background: rgba(90,255,214,.08); }
+
+  .btn-clear-all {
+    background: none;
+    border: 1.5px solid var(--border);
+    color: var(--muted);
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-clear-all:hover { border-color: var(--danger); color: var(--danger); }
+
+  .frames-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .frame-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all .2s;
+    animation: fadeIn .3s ease;
+    position: relative;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .frame-item:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+
+  .frame-img {
+    width: 100%;
+    aspect-ratio: 16/9;
+    object-fit: cover;
+    display: block;
+    background: #000;
+  }
+
+  .frame-info {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .frame-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--accent2);
+    letter-spacing: .05em;
+  }
+
+  .btn-dl {
+    background: var(--accent);
+    color: #0a0a0c;
+    border: none;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    transition: all .15s;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-dl:hover { background: #fff; }
+
+  .delete-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 24px;
+    height: 24px;
+    background: rgba(0,0,0,.6);
+    border: 1px solid rgba(255,255,255,.1);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .frame-item:hover .delete-btn { opacity: 1; }
+
+  .empty-gallery {
+    grid-column: 1/-1;
+    text-align: center;
+    padding: 48px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: .05em;
+  }
+
+  /* toast */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--accent);
+    color: #0a0a0c;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 10px 20px;
+    border-radius: 8px;
+    letter-spacing: .05em;
+    opacity: 0;
+    transition: all .3s;
+    pointer-events: none;
+    z-index: 999;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* canvas hidden */
+  #canvas { display: none; }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 32px 0;
+  }
+
+  /* tabs */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 5px;
+    border-radius: 12px;
+    width: fit-content;
+  }
+  .tab {
+    font-family: 'Be Vietnam Pro', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--muted);
+    background: none;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: .01em;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--accent); color: #0a0a0c; }
+
+  .tool { display: none; }
+  .tool.active { display: block; }
+
+  /* image converter grid */
+  .conv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .conv-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    animation: fadeIn .3s ease;
+    transition: all .2s;
+  }
+  .conv-item:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  }
+  .conv-img {
+    width: 100%;
+    aspect-ratio: 1/1;
+    object-fit: cover;
+    display: block;
+    background: #000;
+  }
+  .conv-loading {
+    width: 100%;
+    aspect-ratio: 1/1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: #000;
+    text-align: center;
+    padding: 12px;
+  }
+  .conv-info {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .conv-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 4px;
+  }
+  .conv-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--accent2);
+    margin-bottom: 8px;
+  }
+  .conv-actions { display: flex; gap: 6px; }
+
+  /* credit */
+  .credit {
+    position: fixed;
+    bottom: 16px;
+    right: 18px;
+    z-index: 998;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .08em;
+    color: var(--muted);
+    background: rgba(17,17,21,.7);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 20px;
+    user-select: none;
+    text-decoration: none;
+    display: inline-block;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .credit:hover { color: var(--accent); border-color: var(--accent); }
+  .credit b { color: var(--accent2); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="badge">🎬 Image & Video Toolkit</div>
+    <h1>Bộ công cụ <span>Ảnh & Video</span></h1>
+    <p class="sub">Cắt ảnh từ video (giữ 4K) · Đổi định dạng ảnh HEIC/PNG/JPG/WebP/AVIF · Không upload</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-video" data-tool="video-tool">🎬 Cắt ảnh từ Video</button>
+    <button class="tab" id="tab-image" data-tool="image-tool">🖼️ Đổi định dạng ảnh</button>
+  </div>
+
+  <!-- ============ VIDEO TOOL ============ -->
+  <div class="tool active" id="video-tool">
+
+  <!-- Drop Zone -->
+  <div class="drop-zone" id="drop-zone">
+    <div class="drop-icon">📱</div>
+    <div class="drop-title">Thả video vào đây</div>
+    <div class="drop-sub" style="margin-top:6px">MP4, MOV, HEVC từ iPhone · Không upload lên server</div>
+    <div class="drop-sub" style="margin-top:4px">hoặc click để chọn file</div>
+    <input type="file" id="file-input" accept="video/*">
+  </div>
+
+  <!-- Workspace -->
+  <div class="workspace" id="workspace">
+
+    <div class="video-panel">
+      <div class="video-header">
+        <span class="video-name" id="file-name">video.mp4</span>
+        <button class="btn-reset" id="btn-reset">✕ Đổi video</button>
+      </div>
+      <div class="video-wrap">
+        <video id="player" controls preload="metadata"></video>
+      </div>
+      <div class="controls">
+        <span class="time-display" id="time-display">00:00.000</span>
+        <div class="scrub-row">
+          <input type="range" id="scrubber" min="0" max="1000" value="0" step="1">
+          <span class="step-label">Timeline scrubber — kéo để chọn frame</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">±</span>
+          <input type="number" id="step-input" value="0.033" step="0.001" min="0.001" title="Bước nhảy (giây)">
+          <span style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace">s</span>
+        </div>
+        <button class="btn-capture" id="btn-capture">📸 Chụp Frame</button>
+      </div>
+      <div class="options-row">
+        <div class="opt-group">
+          <span>Định dạng</span>
+          <select id="fmt-select">
+            <option value="image/png">PNG · Lossless (full quality)</option>
+            <option value="image/avif">AVIF · Hiệu quả cao (kế nhiệm HEIC)</option>
+            <option value="image/heic">HEIC → tự dùng AVIF</option>
+            <option value="image/webp">WebP</option>
+            <option value="image/jpeg">JPEG</option>
+          </select>
+        </div>
+        <div class="opt-group">
+          <span>Chất lượng nén</span>
+          <select id="quality-select">
+            <option value="1.0" selected>100% (gần lossless)</option>
+            <option value="0.95">95%</option>
+            <option value="0.85">85%</option>
+            <option value="0.7">70%</option>
+          </select>
+        </div>
+        <div class="opt-group">
+          <span style="font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace" id="res-info">—</span>
+        </div>
+        <div class="opt-group" style="margin-left:auto">
+          <span style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">
+            ← → Phím mũi tên để bước frame
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="gallery-header">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="gallery-title">Frames đã chụp</span>
+        <span class="count-badge" id="frame-count">0</span>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn-clear-all" id="btn-clear">Xoá tất cả</button>
+        <button class="btn-dl-all" id="btn-dl-all">⬇ Tải tất cả</button>
+      </div>
+    </div>
+
+    <div class="frames-grid" id="frames-grid">
+      <div class="empty-gallery">Chưa có frame nào — chụp bằng nút 📸 hoặc phím Space</div>
+    </div>
+
+  </div><!-- /workspace -->
+
+  </div><!-- /video-tool -->
+
+  <!-- ============ IMAGE CONVERTER TOOL ============ -->
+  <div class="tool" id="image-tool">
+
+    <div class="drop-zone" id="img-drop-zone">
+      <div class="drop-icon">🖼️</div>
+      <div class="drop-title">Thả ảnh vào đây</div>
+      <div class="drop-sub" style="margin-top:6px">HEIC, HEIF, PNG, JPG, WebP, AVIF, GIF, BMP · Đổi nhiều file cùng lúc</div>
+      <div class="drop-sub" style="margin-top:4px">hoặc click để chọn — không upload lên server</div>
+      <input type="file" id="img-input" accept="image/*,.heic,.heif,.heics,.heifs" multiple>
+    </div>
+
+    <div class="workspace" id="img-workspace">
+      <div class="video-panel" style="margin-bottom:24px">
+        <div class="options-row" style="padding:18px 20px">
+          <div class="opt-group">
+            <span>Đổi sang</span>
+            <select id="img-fmt-select">
+              <option value="image/png">PNG · Lossless</option>
+              <option value="image/jpeg" selected>JPEG · .jpg</option>
+              <option value="image/webp">WebP</option>
+              <option value="image/avif">AVIF · hiệu quả cao</option>
+            </select>
+          </div>
+          <div class="opt-group">
+            <span>Chất lượng nén</span>
+            <select id="img-quality-select">
+              <option value="1.0">100% (gần lossless)</option>
+              <option value="0.95">95%</option>
+              <option value="0.9" selected>90%</option>
+              <option value="0.8">80%</option>
+              <option value="0.7">70%</option>
+            </select>
+          </div>
+          <div class="opt-group" style="margin-left:auto;gap:10px">
+            <button class="btn-clear-all" id="img-btn-clear">Xoá tất cả</button>
+            <button class="btn-dl-all" id="img-btn-dl-all">⬇ Đổi & tải tất cả</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="gallery-header">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="gallery-title">Ảnh đã tải lên</span>
+          <span class="count-badge" id="img-count">0</span>
+        </div>
+        <button class="btn-reset" id="img-btn-reset">✕ Tải ảnh khác</button>
+      </div>
+
+      <div class="conv-grid" id="conv-grid"></div>
+    </div>
+
+  </div><!-- /image-tool -->
+
+</div><!-- /app -->
+
+<canvas id="canvas"></canvas>
+<div class="toast" id="toast"></div>
+<a class="credit" href="https://www.linkedin.com/in/vinhpv/" target="_blank" rel="noopener noreferrer">by <b>VinhPV</b></a>
+
+<script>
+  const dropZone   = document.getElementById('drop-zone');
+  const fileInput  = document.getElementById('file-input');
+  const workspace  = document.getElementById('workspace');
+  const player     = document.getElementById('player');
+  const scrubber   = document.getElementById('scrubber');
+  const timeDisplay= document.getElementById('time-display');
+  const stepInput  = document.getElementById('step-input');
+  const btnCapture = document.getElementById('btn-capture');
+  const btnReset   = document.getElementById('btn-reset');
+  const framesGrid = document.getElementById('frames-grid');
+  const frameCount = document.getElementById('frame-count');
+  const canvas     = document.getElementById('canvas');
+  const ctx        = canvas.getContext('2d');
+  const toast      = document.getElementById('toast');
+  const fileName   = document.getElementById('file-name');
+  const fmtSelect  = document.getElementById('fmt-select');
+  const qualitySelect = document.getElementById('quality-select');
+  const btnDlAll   = document.getElementById('btn-dl-all');
+  const btnClear   = document.getElementById('btn-clear');
+  const resInfo    = document.getElementById('res-info');
+
+  let frames = []; // {url, time, ext}
+  let scrubbing = false;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('show'), 2000);
+  }
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    const ms = Math.round((s % 1) * 1000);
+    return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
+  }
+
+  function loadVideo(file) {
+    const url = URL.createObjectURL(file);
+    player.src = url;
+    fileName.textContent = file.name;
+    dropZone.style.display = 'none';
+    workspace.classList.add('visible');
+    player.load();
+  }
+
+  // Drop zone
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => {
+    if (e.target.files[0]) loadVideo(e.target.files[0]);
+  });
+  dropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('video/')) loadVideo(file);
+  });
+
+  // Sync scrubber ↔ video
+  player.addEventListener('timeupdate', () => {
+    if (!scrubbing) {
+      scrubber.value = (player.currentTime / player.duration) * 1000;
+    }
+    timeDisplay.textContent = formatTime(player.currentTime);
+  });
+
+  player.addEventListener('loadedmetadata', () => {
+    scrubber.value = 0;
+    timeDisplay.textContent = formatTime(0);
+    const w = player.videoWidth, h = player.videoHeight;
+    const is4k = w >= 3840 || h >= 2160;
+    const mp = ((w * h) / 1e6).toFixed(1);
+    resInfo.textContent = `Nguồn: ${w}×${h} · ${mp}MP${is4k ? ' · 4K ✓' : ''}`;
+  });
+
+  scrubber.addEventListener('mousedown', () => scrubbing = true);
+  scrubber.addEventListener('touchstart', () => scrubbing = true);
+  scrubber.addEventListener('input', () => {
+    player.currentTime = (scrubber.value / 1000) * player.duration;
+  });
+  scrubber.addEventListener('mouseup', () => { scrubbing = false; });
+  scrubber.addEventListener('touchend', () => { scrubbing = false; });
+
+  // Phát hiện trình duyệt có encode được một mime hay không (kiểm tra 1 lần, có cache)
+  const fmtSupportCache = {};
+  function canEncode(mime) {
+    if (mime in fmtSupportCache) return fmtSupportCache[mime];
+    const c = document.createElement('canvas');
+    c.width = c.height = 2;
+    let ok = false;
+    try {
+      // Nếu trình duyệt không hỗ trợ mime, toDataURL trả về 'data:image/png'
+      ok = c.toDataURL(mime).indexOf('data:' + mime) === 0;
+    } catch (e) { ok = false; }
+    fmtSupportCache[mime] = ok;
+    return ok;
+  }
+
+  function extForMime(mime) {
+    return ({
+      'image/jpeg': 'jpg',
+      'image/webp': 'webp',
+      'image/avif': 'avif',
+      'image/heic': 'heic',
+      'image/png' : 'png'
+    })[mime] || 'png';
+  }
+
+  // Chụp frame ở ĐỘ PHÂN GIẢI GỐC của video (kể cả 4K) — dùng toBlob để không
+  // tạo chuỗi base64 khổng lồ, tránh tràn bộ nhớ và giữ nguyên chất lượng.
+  function captureFrame() {
+    if (!player.src || !player.videoWidth) return;
+
+    let fmt = fmtSelect.value;
+    const quality = parseFloat(qualitySelect.value);
+    const time = player.currentTime;
+
+    // HEIC: không trình duyệt nào encode được → chuyển sang AVIF (cùng họ nén HEVC/AV1)
+    let note = '';
+    if (fmt === 'image/heic') {
+      fmt = 'image/avif';
+      note = ' (HEIC→AVIF)';
+    }
+    // Nếu trình duyệt không hỗ trợ AVIF/WebP thì lùi về PNG lossless
+    if ((fmt === 'image/avif' || fmt === 'image/webp') && !canEncode(fmt)) {
+      showToast(`⚠ Trình duyệt không hỗ trợ ${extForMime(fmt).toUpperCase()} — dùng PNG`);
+      fmt = 'image/png';
+      note = '';
+    }
+
+    // Vẽ ở đúng kích thước gốc của video
+    canvas.width  = player.videoWidth;
+    canvas.height = player.videoHeight;
+    ctx.drawImage(player, 0, 0, canvas.width, canvas.height);
+
+    const ext = extForMime(fmt);
+    // PNG là lossless nên bỏ qua tham số quality
+    const useQuality = (fmt === 'image/png') ? undefined : quality;
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        showToast('⚠ Không tạo được ảnh — thử định dạng khác');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      frames.push({ url, time, ext, w: canvas.width, h: canvas.height, size: blob.size });
+      renderFrames();
+      const mp = ((canvas.width * canvas.height) / 1e6).toFixed(1);
+      showToast(`✓ Frame ${formatTime(time)} · ${canvas.width}×${canvas.height} (${mp}MP)${note}`);
+    }, fmt, useQuality);
+  }
+
+  btnCapture.addEventListener('click', captureFrame);
+
+  // Keyboard
+  document.addEventListener('keydown', e => {
+    if (!workspace.classList.contains('visible')) return;
+    if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
+
+    const step = parseFloat(stepInput.value) || 0.033;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      captureFrame();
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      player.currentTime = Math.min(player.duration, player.currentTime + step);
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      player.currentTime = Math.max(0, player.currentTime - step);
+    }
+  });
+
+  function renderFrames() {
+    frameCount.textContent = frames.length;
+    if (frames.length === 0) {
+      framesGrid.innerHTML = '<div class="empty-gallery">Chưa có frame nào — chụp bằng nút 📸 hoặc phím Space</div>';
+      return;
+    }
+    framesGrid.innerHTML = '';
+    frames.forEach((f, i) => {
+      const item = document.createElement('div');
+      item.className = 'frame-item';
+
+      const img = document.createElement('img');
+      img.className = 'frame-img';
+      img.src = f.url;
+      img.loading = 'lazy';
+
+      const info = document.createElement('div');
+      info.className = 'frame-info';
+
+      const t = document.createElement('span');
+      t.className = 'frame-time';
+      const sizeKB = f.size ? ` · ${(f.size/1024).toFixed(0)}KB` : '';
+      t.textContent = `${formatTime(f.time)} · ${f.w}×${f.h}${sizeKB}`;
+
+      const a = document.createElement('a');
+      a.className = 'btn-dl';
+      a.href = f.url;
+      a.download = `frame_${formatTime(f.time).replace(/[:\.]/g,'_')}.${f.ext}`;
+      a.textContent = 'Tải về';
+
+      const del = document.createElement('button');
+      del.className = 'delete-btn';
+      del.innerHTML = '×';
+      del.title = 'Xoá frame này';
+      del.onclick = () => {
+        URL.revokeObjectURL(frames[i].url);
+        frames.splice(i, 1);
+        renderFrames();
+      };
+
+      info.appendChild(t);
+      info.appendChild(a);
+      item.appendChild(img);
+      item.appendChild(del);
+      item.appendChild(info);
+      framesGrid.appendChild(item);
+    });
+  }
+
+  // Download all as zip-like (sequential download)
+  btnDlAll.addEventListener('click', async () => {
+    if (frames.length === 0) { showToast('Chưa có frame nào!'); return; }
+    frames.forEach((f, i) => {
+      setTimeout(() => {
+        const a = document.createElement('a');
+        a.href = f.url;
+        a.download = `frame_${String(i+1).padStart(3,'0')}_${formatTime(f.time).replace(/[:\.]/g,'_')}.${f.ext}`;
+        a.click();
+      }, i * 200);
+    });
+    showToast(`⬇ Đang tải ${frames.length} frame...`);
+  });
+
+  // Clear all
+  btnClear.addEventListener('click', () => {
+    if (frames.length === 0) return;
+    if (confirm(`Xoá tất cả ${frames.length} frame?`)) {
+      frames.forEach(f => URL.revokeObjectURL(f.url));
+      frames = [];
+      renderFrames();
+      showToast('Đã xoá tất cả frame');
+    }
+  });
+
+  // ============================================================
+  //  TAB SWITCHING
+  // ============================================================
+  const tabs = document.querySelectorAll('.tab');
+  const tools = document.querySelectorAll('.tool');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tools.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tool).classList.add('active');
+    });
+  });
+
+  // ============================================================
+  //  IMAGE FORMAT CONVERTER
+  // ============================================================
+  const imgDropZone   = document.getElementById('img-drop-zone');
+  const imgInput      = document.getElementById('img-input');
+  const imgWorkspace  = document.getElementById('img-workspace');
+  const convGrid      = document.getElementById('conv-grid');
+  const imgCount      = document.getElementById('img-count');
+  const imgFmtSelect  = document.getElementById('img-fmt-select');
+  const imgQualSelect = document.getElementById('img-quality-select');
+  const imgBtnDlAll   = document.getElementById('img-btn-dl-all');
+  const imgBtnClear   = document.getElementById('img-btn-clear');
+  const imgBtnReset   = document.getElementById('img-btn-reset');
+  const convCanvas    = document.createElement('canvas');
+  const convCtx       = convCanvas.getContext('2d');
+
+  let images = [];      // {id, name, bitmap, w, h, origSize, preview}
+  let imgIdSeq = 0;
+  let heicLibPromise = null;
+
+  // Nạp thư viện giải mã HEIC từ CDN — chỉ khi cần (lần đầu gặp file HEIC)
+  function loadHeicLib() {
+    if (heicLibPromise) return heicLibPromise;
+    heicLibPromise = new Promise((resolve, reject) => {
+      if (window.heic2any) return resolve(window.heic2any);
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+      s.onload  = () => window.heic2any ? resolve(window.heic2any) : reject(new Error('lib lỗi'));
+      s.onerror = () => reject(new Error('Không tải được thư viện HEIC (cần internet)'));
+      document.head.appendChild(s);
+    });
+    return heicLibPromise;
+  }
+
+  function isHeicFile(file) {
+    return /\.hei[cf]s?$/i.test(file.name) || /image\/hei[cf]/i.test(file.type || '');
+  }
+
+  // Giải mã 1 file (kể cả HEIC) thành ImageBitmap ở độ phân giải gốc
+  async function decodeToBitmap(file) {
+    let blob = file;
+    if (isHeicFile(file)) {
+      const heic2any = await loadHeicLib();
+      const out = await heic2any({ blob: file, toType: 'image/png' }); // PNG để giữ chất lượng
+      blob = Array.isArray(out) ? out[0] : out;
+    }
+    return await createImageBitmap(blob);
+  }
+
+  // Thumbnail nhẹ để xem trước (không giữ ảnh full-res làm preview)
+  function makePreview(bitmap) {
+    const max = 360;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const pc = document.createElement('canvas');
+    pc.width  = Math.round(bitmap.width  * scale);
+    pc.height = Math.round(bitmap.height * scale);
+    pc.getContext('2d').drawImage(bitmap, 0, 0, pc.width, pc.height);
+    return pc.toDataURL('image/jpeg', 0.8);
+  }
+
+  function baseName(name) {
+    return name.replace(/\.[^.]+$/, '');
+  }
+
+  async function addImages(fileList) {
+    const files = Array.from(fileList).filter(f =>
+      f.type.startsWith('image/') || isHeicFile(f)
+    );
+    if (!files.length) { showToast('Không có file ảnh hợp lệ'); return; }
+
+    imgDropZone.style.display = 'none';
+    imgWorkspace.classList.add('visible');
+
+    for (const file of files) {
+      const id = ++imgIdSeq;
+      const rec = { id, name: file.name, bitmap: null, w: 0, h: 0,
+                    origSize: file.size, preview: null };
+      images.push(rec);
+      renderImages();              // hiện ngay ô "đang giải mã"
+      try {
+        const bmp = await decodeToBitmap(file);
+        rec.bitmap = bmp;
+        rec.w = bmp.width;
+        rec.h = bmp.height;
+        rec.preview = makePreview(bmp);
+      } catch (err) {
+        rec.error = err.message || 'Lỗi giải mã';
+        showToast('⚠ ' + rec.error);
+      }
+      renderImages();
+    }
+  }
+
+  // Đổi 1 ảnh sang định dạng đang chọn → trả về {blob, ext}
+  async function convertImage(rec) {
+    let fmt = imgFmtSelect.value;
+    const quality = parseFloat(imgQualSelect.value);
+    if (fmt === 'image/heic') fmt = 'image/avif';            // HEIC không encode được
+    if ((fmt === 'image/avif' || fmt === 'image/webp') && !canEncode(fmt)) {
+      fmt = 'image/png';
+    }
+    convCanvas.width  = rec.w;
+    convCanvas.height = rec.h;
+    convCtx.clearRect(0, 0, rec.w, rec.h);
+    convCtx.drawImage(rec.bitmap, 0, 0, rec.w, rec.h);
+    const useQuality = (fmt === 'image/png') ? undefined : quality;
+    const blob = await new Promise(res => convCanvas.toBlob(res, fmt, useQuality));
+    return { blob, ext: extForMime(fmt) };
+  }
+
+  async function downloadImage(rec) {
+    if (!rec.bitmap) return;
+    try {
+      const { blob, ext } = await convertImage(rec);
+      if (!blob) { showToast('⚠ Không tạo được ảnh'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${baseName(rec.name)}.${ext}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      showToast('⚠ Lỗi đổi định dạng');
+    }
+  }
+
+  function renderImages() {
+    imgCount.textContent = images.length;
+    if (images.length === 0) {
+      convGrid.innerHTML = '<div class="empty-gallery">Chưa có ảnh nào — thả file vào ô phía trên</div>';
+      return;
+    }
+    convGrid.innerHTML = '';
+    images.forEach((rec) => {
+      const item = document.createElement('div');
+      item.className = 'conv-item';
+
+      if (rec.bitmap) {
+        const img = document.createElement('img');
+        img.className = 'conv-img';
+        img.src = rec.preview;
+        img.loading = 'lazy';
+        item.appendChild(img);
+      } else {
+        const ld = document.createElement('div');
+        ld.className = 'conv-loading';
+        ld.textContent = rec.error ? ('✕ ' + rec.error) : '⏳ Đang giải mã…';
+        item.appendChild(ld);
+      }
+
+      const info = document.createElement('div');
+      info.className = 'conv-info';
+
+      const nm = document.createElement('div');
+      nm.className = 'conv-name';
+      nm.textContent = rec.name;
+      nm.title = rec.name;
+
+      const meta = document.createElement('div');
+      meta.className = 'conv-meta';
+      meta.textContent = rec.bitmap
+        ? `${rec.w}×${rec.h} · ${(rec.origSize/1024).toFixed(0)}KB`
+        : `${(rec.origSize/1024).toFixed(0)}KB`;
+
+      const actions = document.createElement('div');
+      actions.className = 'conv-actions';
+
+      const dl = document.createElement('button');
+      dl.className = 'btn-dl';
+      dl.textContent = 'Đổi & tải';
+      dl.disabled = !rec.bitmap;
+      dl.style.opacity = rec.bitmap ? '1' : '.4';
+      dl.onclick = () => downloadImage(rec);
+
+      actions.appendChild(dl);
+      info.appendChild(nm);
+      info.appendChild(meta);
+      info.appendChild(actions);
+      item.appendChild(info);
+
+      const del = document.createElement('button');
+      del.className = 'delete-btn';
+      del.innerHTML = '×';
+      del.title = 'Xoá ảnh này';
+      del.onclick = () => {
+        if (rec.bitmap && rec.bitmap.close) rec.bitmap.close();
+        images = images.filter(x => x.id !== rec.id);
+        renderImages();
+      };
+      item.appendChild(del);
+
+      convGrid.appendChild(item);
+    });
+  }
+
+  // Drop zone ảnh
+  imgDropZone.addEventListener('click', () => imgInput.click());
+  imgInput.addEventListener('change', e => {
+    if (e.target.files.length) addImages(e.target.files);
+    imgInput.value = '';
+  });
+  imgDropZone.addEventListener('dragover', e => {
+    e.preventDefault(); imgDropZone.classList.add('drag-over');
+  });
+  imgDropZone.addEventListener('dragleave', () => imgDropZone.classList.remove('drag-over'));
+  imgDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    imgDropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) addImages(e.dataTransfer.files);
+  });
+
+  // Đổi & tải tất cả
+  imgBtnDlAll.addEventListener('click', async () => {
+    const ready = images.filter(r => r.bitmap);
+    if (!ready.length) { showToast('Chưa có ảnh sẵn sàng'); return; }
+    showToast(`⬇ Đang đổi ${ready.length} ảnh…`);
+    for (let i = 0; i < ready.length; i++) {
+      await downloadImage(ready[i]);
+      await new Promise(r => setTimeout(r, 250));
+    }
+  });
+
+  // Xoá tất cả / Reset
+  function clearImages() {
+    images.forEach(r => { if (r.bitmap && r.bitmap.close) r.bitmap.close(); });
+    images = [];
+    renderImages();
+  }
+  imgBtnClear.addEventListener('click', () => {
+    if (!images.length) return;
+    if (confirm(`Xoá tất cả ${images.length} ảnh?`)) {
+      clearImages();
+      showToast('Đã xoá tất cả ảnh');
+    }
+  });
+  imgBtnReset.addEventListener('click', () => {
+    clearImages();
+    imgWorkspace.classList.remove('visible');
+    imgDropZone.style.display = 'block';
+  });
+
+  renderImages();
+</script>
+</body>
+</html>
