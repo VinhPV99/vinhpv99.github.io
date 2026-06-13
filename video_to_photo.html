@@ -196,8 +196,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 300px;
-    max-height: 500px;
+    min-height: 200px;
     cursor: grab;
     touch-action: none;
     user-select: none;
@@ -205,12 +204,13 @@
   }
   .video-wrap:active { cursor: grabbing; }
 
-  #player { pointer-events: none; }
-
   #player {
-    max-width: 100%;
-    max-height: 500px;
+    width: 100%;
+    height: auto;
+    max-height: 85vh;
+    object-fit: contain;
     display: block;
+    pointer-events: none;
   }
 
   /* controls */
@@ -237,6 +237,71 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+  }
+
+  /* ===== Timeline ảnh (filmstrip) ===== */
+  .filmstrip {
+    position: relative;
+    width: 100%;
+    height: 58px;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .film-track {
+    position: absolute;
+    inset: 0;
+    display: flex;
+  }
+  .film-thumb {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    pointer-events: none;
+    border-right: 1px solid rgba(0,0,0,.35);
+  }
+  .film-building {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .05em;
+    background: #000;
+  }
+  .playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(232,255,90,.6);
+    pointer-events: none;
+    transform: translateX(-1px);
+    transition: left .04s linear;
+  }
+  .playhead::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    width: 11px;
+    height: 11px;
+    background: var(--accent);
+    border-radius: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 6px rgba(232,255,90,.6);
   }
 
   input[type=range] {
@@ -676,8 +741,13 @@
       <div class="controls">
         <span class="time-display" id="time-display">00:00.000</span>
         <div class="scrub-row">
-          <input type="range" id="scrubber" min="0" max="1000" value="0" step="1">
-          <span class="step-label">Kéo thanh này hoặc kéo ngang trực tiếp trên ảnh để tua từng frame</span>
+          <input type="range" id="scrubber" min="0" max="1000" value="0" step="1" style="display:none">
+          <div class="filmstrip" id="filmstrip">
+            <div class="film-track" id="film-track"></div>
+            <div class="film-building" id="film-building">⏳ Đang tạo timeline ảnh…</div>
+            <div class="playhead" id="playhead"></div>
+          </div>
+          <span class="step-label">Chạm / kéo trên dải ảnh để tua frame · hoặc kéo ngang trực tiếp trên ảnh lớn</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">±</span>
@@ -690,9 +760,9 @@
         <div class="opt-group">
           <span>Định dạng</span>
           <select id="fmt-select">
+            <option value="image/heic" selected>HEIC · chuẩn iPhone (xuất AVIF)</option>
             <option value="image/png">PNG · Lossless (full quality)</option>
             <option value="image/avif">AVIF · Hiệu quả cao (kế nhiệm HEIC)</option>
-            <option value="image/heic">HEIC → tự dùng AVIF</option>
             <option value="image/webp">WebP</option>
             <option value="image/jpeg">JPEG</option>
           </select>
@@ -864,10 +934,12 @@
 
   // Sync scrubber ↔ video
   player.addEventListener('timeupdate', () => {
+    if (building) return;            // bỏ qua khi đang dựng timeline ảnh
     if (!scrubbing) {
       scrubber.value = (player.currentTime / player.duration) * 1000;
     }
     timeDisplay.textContent = formatTime(player.currentTime);
+    updatePlayhead();
   });
 
   player.addEventListener('loadedmetadata', () => {
@@ -902,7 +974,7 @@
   let vDragging = false, vStartX = 0, vStartTime = 0;
 
   function seekByDrag(clientX) {
-    if (!player.duration) return;
+    if (!player.duration || building) return;
     const rect = videoWrap.getBoundingClientRect();
     const frac = (clientX - vStartX) / rect.width;
     let t = vStartTime + frac * player.duration;
@@ -910,9 +982,10 @@
     player.currentTime = t;
     scrubber.value = (t / player.duration) * 1000;
     timeDisplay.textContent = formatTime(t);
+    updatePlayhead();
   }
   videoWrap.addEventListener('pointerdown', e => {
-    if (!player.duration) return;
+    if (!player.duration || building) return;
     vDragging = true;
     vStartX = e.clientX;
     vStartTime = player.currentTime;
@@ -928,6 +1001,102 @@
   }
   videoWrap.addEventListener('pointerup', endVDrag);
   videoWrap.addEventListener('pointercancel', endVDrag);
+
+  // ============================================================
+  //  TIMELINE ẢNH (filmstrip) — thay cho thanh trượt
+  // ============================================================
+  const filmstrip    = document.getElementById('filmstrip');
+  const filmTrack    = document.getElementById('film-track');
+  const filmBuilding = document.getElementById('film-building');
+  const playhead     = document.getElementById('playhead');
+  let building = false;
+  let filmToken = 0;   // huỷ lần dựng cũ nếu đổi video giữa chừng
+
+  function updatePlayhead() {
+    if (!player.duration) return;
+    playhead.style.left = (player.currentTime / player.duration) * 100 + '%';
+  }
+
+  function seekFromFilmstrip(clientX) {
+    if (!player.duration || building) return;
+    const rect = filmstrip.getBoundingClientRect();
+    let frac = (clientX - rect.left) / rect.width;
+    frac = Math.max(0, Math.min(1, frac));
+    const t = frac * player.duration;
+    player.currentTime = t;
+    scrubber.value = frac * 1000;
+    timeDisplay.textContent = formatTime(t);
+    playhead.style.left = frac * 100 + '%';
+  }
+
+  let fsDragging = false;
+  filmstrip.addEventListener('pointerdown', e => {
+    if (building || !player.duration) return;
+    fsDragging = true;
+    try { filmstrip.setPointerCapture(e.pointerId); } catch (_) {}
+    seekFromFilmstrip(e.clientX);
+  });
+  filmstrip.addEventListener('pointermove', e => {
+    if (fsDragging) { e.preventDefault(); seekFromFilmstrip(e.clientX); }
+  });
+  function endFs(e) {
+    if (!fsDragging) return;
+    fsDragging = false;
+    try { filmstrip.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  filmstrip.addEventListener('pointerup', endFs);
+  filmstrip.addEventListener('pointercancel', endFs);
+
+  // Seek tới 1 mốc thời gian và đợi khung hình sẵn sàng (có timeout phòng treo)
+  function seekTo(t) {
+    return new Promise(resolve => {
+      let done = false;
+      const fin = () => { if (done) return; done = true; player.removeEventListener('seeked', fin); resolve(); };
+      player.addEventListener('seeked', fin);
+      setTimeout(fin, 1500);
+      try { player.currentTime = Math.max(0, Math.min(player.duration || 0, t)); }
+      catch (e) { fin(); }
+    });
+  }
+
+  // Dựng dải ảnh từ video: chụp N khung hình nhỏ rải đều theo thời lượng
+  async function buildFilmstrip() {
+    if (!player.duration || !isFinite(player.duration) || !player.videoWidth) return;
+    const myToken = ++filmToken;
+    building = true;
+    filmTrack.innerHTML = '';
+    filmBuilding.style.display = 'flex';
+
+    const stripW = filmstrip.clientWidth || 320;
+    const count  = Math.min(24, Math.max(8, Math.round(stripW / 38)));
+    const tw = 160;
+    const th = Math.max(1, Math.round(tw * (player.videoHeight / player.videoWidth)));
+    const c  = document.createElement('canvas');
+    c.width = tw; c.height = th;
+    const cx = c.getContext('2d');
+    const saved = player.currentTime;
+    const dur = player.duration;
+
+    for (let i = 0; i < count; i++) {
+      const t = ((i + 0.5) / count) * dur;
+      await seekTo(t);
+      if (myToken !== filmToken) return;            // đã đổi video → bỏ
+      try { cx.drawImage(player, 0, 0, tw, th); } catch (e) {}
+      const img = document.createElement('img');
+      img.className = 'film-thumb';
+      img.src = c.toDataURL('image/jpeg', 0.55);
+      filmTrack.appendChild(img);
+    }
+
+    await seekTo(saved);
+    if (myToken !== filmToken) return;
+    filmBuilding.style.display = 'none';
+    building = false;
+    updatePlayhead();
+  }
+
+  // Dựng timeline mỗi khi nạp video mới
+  player.addEventListener('loadedmetadata', () => { setTimeout(buildFilmstrip, 80); });
 
   // ============================================================
   //  LƯU THẲNG VÀO THƯ VIỆN ẢNH (iPhone/Android) qua Web Share
@@ -996,6 +1165,7 @@
   // tạo chuỗi base64 khổng lồ, tránh tràn bộ nhớ và giữ nguyên chất lượng.
   function captureFrame() {
     if (!player.src || !player.videoWidth) return;
+    if (building) { showToast('⏳ Đang tạo timeline, đợi chút…'); return; }
 
     let fmt = fmtSelect.value;
     const quality = parseFloat(qualitySelect.value);
@@ -1041,6 +1211,7 @@
   // Keyboard
   document.addEventListener('keydown', e => {
     if (!workspace.classList.contains('visible')) return;
+    if (building) return;
     if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)) return;
 
     const step = parseFloat(stepInput.value) || 0.033;
