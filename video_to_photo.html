@@ -198,7 +198,14 @@
     justify-content: center;
     min-height: 300px;
     max-height: 500px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
+  .video-wrap:active { cursor: grabbing; }
+
+  #player { pointer-events: none; }
 
   #player {
     max-width: 100%;
@@ -650,7 +657,7 @@
   <div class="drop-zone" id="drop-zone">
     <div class="drop-icon">📱</div>
     <div class="drop-title">Thả video vào đây</div>
-    <div class="drop-sub" style="margin-top:6px">MP4, MOV, HEVC từ iPhone · Không upload lên server</div>
+    <div class="drop-sub" style="margin-top:6px">MP4, MOV, HEVC từ iPhone · Không upload · Tải xuống = lưu thẳng vào Thư viện ảnh</div>
     <div class="drop-sub" style="margin-top:4px">hoặc click để chọn file</div>
     <input type="file" id="file-input" accept="video/*">
   </div>
@@ -664,13 +671,13 @@
         <button class="btn-reset" id="btn-reset">✕ Đổi video</button>
       </div>
       <div class="video-wrap">
-        <video id="player" controls preload="metadata"></video>
+        <video id="player" preload="metadata" playsinline muted disablepictureinpicture></video>
       </div>
       <div class="controls">
         <span class="time-display" id="time-display">00:00.000</span>
         <div class="scrub-row">
           <input type="range" id="scrubber" min="0" max="1000" value="0" step="1">
-          <span class="step-label">Timeline scrubber — kéo để chọn frame</span>
+          <span class="step-label">Kéo thanh này hoặc kéo ngang trực tiếp trên ảnh để tua từng frame</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace">±</span>
@@ -880,6 +887,86 @@
   scrubber.addEventListener('mouseup', () => { scrubbing = false; });
   scrubber.addEventListener('touchend', () => { scrubbing = false; });
 
+  // ============================================================
+  //  KHÔNG CHO PHÁT VIDEO — chỉ tua/kéo từng frame
+  // ============================================================
+  // Nếu vì lý do gì đó video bắt đầu phát, lập tức dừng lại để luôn đứng yên 1 frame.
+  player.addEventListener('play', () => player.pause());
+  player.addEventListener('loadedmetadata', () => {
+    // Hích nhẹ để render khung hình đầu tiên (iOS không vẽ frame khi chưa seek)
+    try { player.currentTime = Math.min(0.001, (player.duration || 1) - 0.001); } catch (e) {}
+  });
+
+  // Kéo ngang TRỰC TIẾP trên ảnh để tua frame (relative drag: kéo hết bề ngang ≈ hết thời lượng)
+  const videoWrap = document.querySelector('.video-wrap');
+  let vDragging = false, vStartX = 0, vStartTime = 0;
+
+  function seekByDrag(clientX) {
+    if (!player.duration) return;
+    const rect = videoWrap.getBoundingClientRect();
+    const frac = (clientX - vStartX) / rect.width;
+    let t = vStartTime + frac * player.duration;
+    t = Math.max(0, Math.min(player.duration, t));
+    player.currentTime = t;
+    scrubber.value = (t / player.duration) * 1000;
+    timeDisplay.textContent = formatTime(t);
+  }
+  videoWrap.addEventListener('pointerdown', e => {
+    if (!player.duration) return;
+    vDragging = true;
+    vStartX = e.clientX;
+    vStartTime = player.currentTime;
+    try { videoWrap.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  videoWrap.addEventListener('pointermove', e => {
+    if (vDragging) { e.preventDefault(); seekByDrag(e.clientX); }
+  });
+  function endVDrag(e) {
+    if (!vDragging) return;
+    vDragging = false;
+    try { videoWrap.releasePointerCapture(e.pointerId); } catch (_) {}
+  }
+  videoWrap.addEventListener('pointerup', endVDrag);
+  videoWrap.addEventListener('pointercancel', endVDrag);
+
+  // ============================================================
+  //  LƯU THẲNG VÀO THƯ VIỆN ẢNH (iPhone/Android) qua Web Share
+  // ============================================================
+  // Trên iPhone: hiện bảng chia sẻ → chọn "Lưu ảnh" / "Lưu N ảnh" để lưu vào Thư viện.
+  // Trên máy tính / trình duyệt không hỗ trợ: tự động tải file về như bình thường.
+  function blobToFile(blob, filename) {
+    return new File([blob], filename, { type: blob.type || 'image/png' });
+  }
+
+  async function saveToPhotos(items) {
+    // items: [{ blob, filename }, ...]
+    const files = items.map(it => blobToFile(it.blob, it.filename));
+
+    if (navigator.canShare && navigator.canShare({ files })) {
+      try {
+        await navigator.share({ files });
+        return 'shared';
+      } catch (err) {
+        if (err && err.name === 'AbortError') return 'cancelled'; // người dùng bấm huỷ
+        // các lỗi khác → ngã sang tải file thường bên dưới
+      }
+    }
+
+    // Fallback: tải file thường
+    for (let i = 0; i < items.length; i++) {
+      const url = URL.createObjectURL(items[i].blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = items[i].filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      if (items.length > 1) await new Promise(r => setTimeout(r, 200));
+    }
+    return 'downloaded';
+  }
+
   // Phát hiện trình duyệt có encode được một mime hay không (kiểm tra 1 lần, có cache)
   const fmtSupportCache = {};
   function canEncode(mime) {
@@ -942,7 +1029,7 @@
         return;
       }
       const url = URL.createObjectURL(blob);
-      frames.push({ url, time, ext, w: canvas.width, h: canvas.height, size: blob.size });
+      frames.push({ url, blob, time, ext, w: canvas.width, h: canvas.height, size: blob.size });
       renderFrames();
       const mp = ((canvas.width * canvas.height) / 1e6).toFixed(1);
       showToast(`✓ Frame ${formatTime(time)} · ${canvas.width}×${canvas.height} (${mp}MP)${note}`);
@@ -993,11 +1080,15 @@
       const sizeKB = f.size ? ` · ${(f.size/1024).toFixed(0)}KB` : '';
       t.textContent = `${formatTime(f.time)} · ${f.w}×${f.h}${sizeKB}`;
 
-      const a = document.createElement('a');
+      const a = document.createElement('button');
       a.className = 'btn-dl';
-      a.href = f.url;
-      a.download = `frame_${formatTime(f.time).replace(/[:\.]/g,'_')}.${f.ext}`;
-      a.textContent = 'Tải về';
+      a.textContent = '⬇ Lưu ảnh';
+      a.onclick = async () => {
+        const fname = `frame_${formatTime(f.time).replace(/[:\.]/g,'_')}.${f.ext}`;
+        const res = await saveToPhotos([{ blob: f.blob, filename: fname }]);
+        if (res === 'shared')      showToast('✓ Chọn "Lưu ảnh" để lưu vào Thư viện');
+        else if (res === 'downloaded') showToast('✓ Đã tải ảnh về máy');
+      };
 
       const del = document.createElement('button');
       del.className = 'delete-btn';
@@ -1018,18 +1109,16 @@
     });
   }
 
-  // Download all as zip-like (sequential download)
+  // Lưu tất cả frame vào Thư viện ảnh (1 lần chia sẻ duy nhất)
   btnDlAll.addEventListener('click', async () => {
     if (frames.length === 0) { showToast('Chưa có frame nào!'); return; }
-    frames.forEach((f, i) => {
-      setTimeout(() => {
-        const a = document.createElement('a');
-        a.href = f.url;
-        a.download = `frame_${String(i+1).padStart(3,'0')}_${formatTime(f.time).replace(/[:\.]/g,'_')}.${f.ext}`;
-        a.click();
-      }, i * 200);
-    });
-    showToast(`⬇ Đang tải ${frames.length} frame...`);
+    const items = frames.map((f, i) => ({
+      blob: f.blob,
+      filename: `frame_${String(i+1).padStart(3,'0')}_${formatTime(f.time).replace(/[:\.]/g,'_')}.${f.ext}`
+    }));
+    const res = await saveToPhotos(items);
+    if (res === 'shared')      showToast(`✓ Chọn "Lưu ${frames.length} ảnh" để lưu vào Thư viện`);
+    else if (res === 'downloaded') showToast(`⬇ Đang tải ${frames.length} ảnh...`);
   });
 
   // Clear all
@@ -1172,12 +1261,10 @@
     try {
       const { blob, ext } = await convertImage(rec);
       if (!blob) { showToast('⚠ Không tạo được ảnh'); return; }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${baseName(rec.name)}.${ext}`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const fname = `${baseName(rec.name)}.${ext}`;
+      const res = await saveToPhotos([{ blob, filename: fname }]);
+      if (res === 'shared')      showToast('✓ Chọn "Lưu ảnh" để lưu vào Thư viện');
+      else if (res === 'downloaded') showToast('✓ Đã tải ảnh về máy');
     } catch (e) {
       showToast('⚠ Lỗi đổi định dạng');
     }
@@ -1268,15 +1355,22 @@
     if (e.dataTransfer.files.length) addImages(e.dataTransfer.files);
   });
 
-  // Đổi & tải tất cả
+  // Đổi & lưu tất cả vào Thư viện ảnh (1 lần chia sẻ duy nhất)
   imgBtnDlAll.addEventListener('click', async () => {
     const ready = images.filter(r => r.bitmap);
     if (!ready.length) { showToast('Chưa có ảnh sẵn sàng'); return; }
-    showToast(`⬇ Đang đổi ${ready.length} ảnh…`);
-    for (let i = 0; i < ready.length; i++) {
-      await downloadImage(ready[i]);
-      await new Promise(r => setTimeout(r, 250));
+    showToast(`⏳ Đang đổi ${ready.length} ảnh…`);
+    const items = [];
+    for (const rec of ready) {
+      try {
+        const { blob, ext } = await convertImage(rec);
+        if (blob) items.push({ blob, filename: `${baseName(rec.name)}.${ext}` });
+      } catch (e) {}
     }
+    if (!items.length) { showToast('⚠ Không đổi được ảnh'); return; }
+    const res = await saveToPhotos(items);
+    if (res === 'shared')      showToast(`✓ Chọn "Lưu ${items.length} ảnh" vào Thư viện`);
+    else if (res === 'downloaded') showToast(`⬇ Đang tải ${items.length} ảnh...`);
   });
 
   // Xoá tất cả / Reset
